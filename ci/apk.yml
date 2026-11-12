@@ -1,0 +1,33 @@
+name: apk
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+      - name: keystore
+        run: echo "${{ secrets.KEYSTORE_B64 }}" | base64 -d > "$RUNNER_TEMP/imza.p12"
+      - name: build
+        env:
+          IMZA_DOSYA: ${{ runner.temp }}/imza.p12
+          IMZA_SIFRE: ${{ secrets.KEYSTORE_PASS }}
+        run: gradle --no-daemon assembleRelease -PsurumKodu=${{ github.run_number }}
+      - name: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V="1.0.${{ github.run_number }}"
+          cp app/build/outputs/apk/release/app-release.apk "ruzgar-$V.apk"
+          gh release create "v$V" "ruzgar-$V.apk" --title "Ruzgar $V" --notes "Automatic build from main"
