@@ -44,6 +44,12 @@
                 <data android:scheme="https" android:host="bekoas.github.io" android:pathPrefix="/ruzgar" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".DinleAktivite"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
         <service
             android:name=".BalonServisi"
             android:exported="false"
