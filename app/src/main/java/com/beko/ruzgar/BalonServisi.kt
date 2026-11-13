@@ -15,6 +15,10 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.provider.Settings
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
+import android.net.Uri
+import android.webkit.ValueCallback
+import android.webkit.WebChromeClient
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -47,6 +51,7 @@ class BalonServisi : Service() {
     private var panelAcik = false
     private var tts: TextToSpeech? = null
     private var sesHazir = false
+    private var sohbet = false   // hands-free: after the answer is read, listen again
 
     override fun onBind(i: Intent?) = null
 
@@ -54,6 +59,11 @@ class BalonServisi : Service() {
         super.onCreate(); ornek = this
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
         tts = TextToSpeech(this) { d -> if (d == TextToSpeech.SUCCESS) { tts?.language = Locale("tr", "TR"); sesHazir = true } }
+        tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(id: String?) {}
+            @Deprecated("") override fun onError(id: String?) {}
+            override fun onDone(id: String?) { if (sohbet) balon?.postDelayed({ if (sohbet) sesliSor() }, 450) }
+        })
     }
 
     override fun onStartCommand(i: Intent?, f: Int, id: Int): Int {
@@ -167,6 +177,15 @@ class BalonServisi : Service() {
                     panelKapat(); startActivity(Intent(Intent.ACTION_VIEW, r.url).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); return true
                 }
             }
+            webChromeClient = object : WebChromeClient() {
+                override fun onShowFileChooser(v: WebView, cb: ValueCallback<Array<Uri>>, p: FileChooserParams): Boolean {
+                    DosyaAktivite.geriDonus?.onReceiveValue(null)
+                    DosyaAktivite.geriDonus = cb; DosyaAktivite.istek = runCatching { p.createIntent() }.getOrNull()
+                    panel?.visibility = View.GONE
+                    startActivity(Intent(this@BalonServisi, DosyaAktivite::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION))
+                    return true
+                }
+            }
             addJavascriptInterface(PanelKopru(), "RuzgarAndroid")
             loadUrl(SAYFA)
         }
@@ -192,7 +211,12 @@ class BalonServisi : Service() {
         balon?.visibility = View.GONE
     }
 
+    fun paylasimVer(j: String) { web?.evaluateJavascript("window.paylasim && window.paylasim($j)", null) }
+
+    fun panelGoster() { if (panelAcik) panel?.visibility = View.VISIBLE }
+
     private fun panelKapat() {
+        sohbet = false; tts?.stop()
         panel?.visibility = View.GONE; panelAcik = false
         balon?.visibility = View.VISIBLE
     }
@@ -208,12 +232,22 @@ class BalonServisi : Service() {
 
     fun sesGeldi(t: String?) {
         panelAc()
+        if (t.isNullOrBlank() || BITIR.matches(t.trim().lowercase())) { sohbet = false; return }
+        sohbet = true
         if (!t.isNullOrBlank()) web?.evaluateJavascript("window.sesliGonder && window.sesliGonder(" + JSONObject.quote(t) + ")", null)
     }
 
     inner class PanelKopru {
         @JavascriptInterface fun dinle() = balon?.post { sesliSor() }
-        @JavascriptInterface fun oku(t: String) { if (sesHazir) tts?.speak(t, TextToSpeech.QUEUE_FLUSH, null, "ruzgar") }
+        @JavascriptInterface fun oku(t: String) { if (sesHazir) tts?.speak(t, TextToSpeech.QUEUE_FLUSH, null, "ruzgar") else sohbet = false }
+        @JavascriptInterface fun sus() { sohbet = false; tts?.stop() }
+        @JavascriptInterface fun eylem(j: String): String {
+            val s = Eylem.yap(this@BalonServisi, j)
+            if (s == "REHBER_IZNI") { balon?.post { panelKapat(); startActivity(Intent(this@BalonServisi, MainActivity::class.java).setAction("rehber").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                return "Rehber izni gerekiyor: uygulamada izin ver, sonra tekrar dene" }
+            if (s.endsWith("a\u00e7\u0131ld\u0131") || s.contains("bas")) balon?.post { panelKapat() }
+            return s
+        }
         @JavascriptInterface fun qrOkut() = balon?.post { panelKapat(); startActivity(Intent(this@BalonServisi, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
         @JavascriptInterface fun balonDurum(): Boolean = true
         @JavascriptInterface fun balon(ac: Boolean) = balon?.post { if (!ac) { getSharedPreferences("ruzgar", 0).edit().putBoolean("balon", false).apply(); stopSelf() } }
@@ -230,6 +264,7 @@ class BalonServisi : Service() {
 
     companion object {
         var ornek: BalonServisi? = null
+        val BITIR = Regex("^(tamam|kapat|dur|bitti|yeter|te\u015fekk\u00fcrler|te\u015fekk\u00fcr ederim|sa\u011f ol|sa\u011fol|g\u00f6r\u00fc\u015f\u00fcr\u00fcz)[.! ]*$")
         fun baslat(c: Context) { c.startForegroundService(Intent(c, BalonServisi::class.java)) }
         fun durdur(c: Context) { c.stopService(Intent(c, BalonServisi::class.java)) }
     }
