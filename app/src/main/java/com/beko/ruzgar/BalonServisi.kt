@@ -67,6 +67,7 @@ class BalonServisi : Service() {
     }
 
     override fun onStartCommand(i: Intent?, f: Int, id: Int): Int {
+        if (i?.action == "ekran") { if (balon != null) ekranaSor(); return START_STICKY }
         if (i?.action == "kapat") { getSharedPreferences("ruzgar", 0).edit().putBoolean("balon", false).apply(); stopSelf(); return START_NOT_STICKY }
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel("balon", "R\u00fczgar balonu", NotificationManager.IMPORTANCE_MIN))
@@ -76,6 +77,7 @@ class BalonServisi : Service() {
             .setContentTitle("R\u00fczgar balonu a\u00e7\u0131k")
             .setContentText("Dokun: sohbet \u00b7 Bas\u0131l\u0131 tut: sesli sor")
             .setContentIntent(acmaNiyeti())
+            .addAction(Notification.Action.Builder(null, "\ud83d\udc41 Ekrana sor", PendingIntent.getService(this, 2, Intent(this, BalonServisi::class.java).setAction("ekran"), PendingIntent.FLAG_IMMUTABLE)).build())
             .addAction(Notification.Action.Builder(null, "Balonu kapat", kapat).build())
             .setOngoing(true).build()
         if (Build.VERSION.SDK_INT >= 34) startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE) else startForeground(1, n)
@@ -163,6 +165,7 @@ class BalonServisi : Service() {
             text = yazi; contentDescription = aciklama; setTextColor(Color.parseColor("#C9C5F2")); textSize = 19f
             gravity = Gravity.CENTER; setOnClickListener { is_() }
         }.also { ust.addView(it, LinearLayout.LayoutParams(dp(44), dp(40))) }
+        dugme("\ud83d\udc41", "Ekrana sor") { ekranaSor() }
         dugme("\ud83c\udf99", "Sesli sor") { sesliSor() }
         dugme("\u2197", "Uygulamay\u0131 a\u00e7") { panelKapat(); startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)) }
         dugme("\u2715", "Kapat") { panelKapat() }
@@ -228,6 +231,21 @@ class BalonServisi : Service() {
         panelHazirla()
         panel?.visibility = View.GONE; balon?.visibility = View.GONE
         startActivity(Intent(this, DinleAktivite::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION))
+    }
+
+    // Ask about the screen: hide the panel and bubble, Android asks for permission, one frame comes back attached.
+    private fun ekranaSor() {
+        panelHazirla(); sohbet = false; tts?.stop()
+        panel?.visibility = View.GONE; balon?.visibility = View.GONE
+        balon?.postDelayed({ startActivity(Intent(this, EkranAktivite::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)) }, 250)
+    }
+
+    fun ekranGeldi(b64: String?) = balon?.post {
+        panelAc()
+        if (b64 == null) { web?.evaluateJavascript("window.durumYaz && durumYaz('ekran al\u0131namad\u0131', '#f5a6bd')", null); return@post }
+        paylasimVer(org.json.JSONObject().put("metin", "").put("dosyalar", org.json.JSONArray().put(
+            org.json.JSONObject().put("ad", "ekran.jpg").put("tur", "image/jpeg").put("b64", b64))).toString())
+        balon?.postDelayed({ sesliSor() }, 500)   // then just ask out loud: "bu ne?", "bunu \u00e7evir"...
     }
 
     fun sesGeldi(t: String?) {
