@@ -179,12 +179,14 @@ class MainActivity : Activity() {
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() { if (web.canGoBack()) web.goBack() else moveTaskToBack(true) }
 
-    override fun onStart() { super.onStart(); BalonServisi.durdur(this) }          // app visible: hide the bubble
+    override fun onStart() { super.onStart(); onde = true; BalonServisi.durdur(this) }          // app visible: hide the bubble
     override fun onStop() {
-        sohbet = false                                                         // app hidden: show the bubble
+        onde = false; sohbet = false                                                         // app hidden: show the bubble
         super.onStop()
         if (balonAcik(this) && Settings.canDrawOverlays(this) && !isFinishing) runCatching { BalonServisi.baslat(this) }
     }
+
+    companion object { @Volatile var onde = false }   // app on screen: the bubble stays hidden
 
     inner class Kopru {
         @JavascriptInterface fun qrOkut() = runOnUiThread {

@@ -24,6 +24,8 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
+import android.view.ViewOutlineProvider
+import android.graphics.Outline
 import android.view.WindowManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
@@ -81,6 +83,7 @@ class BalonServisi : Service() {
             .addAction(Notification.Action.Builder(null, "Balonu kapat", kapat).build())
             .setOngoing(true).build()
         if (Build.VERSION.SDK_INT >= 34) startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE) else startForeground(1, n)
+        if (MainActivity.onde) { stopSelf(); return START_NOT_STICKY }   // app is open: no bubble on top of it
         if (balon == null && Settings.canDrawOverlays(this)) balonEkle()
         return START_STICKY
     }
@@ -91,11 +94,18 @@ class BalonServisi : Service() {
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
+    // round, like the Mac bubble: the picture is cut to a circle so no dark square shows behind it
+    private fun yuvarla(v: ImageView) {
+        v.scaleType = ImageView.ScaleType.CENTER_CROP
+        v.outlineProvider = object : ViewOutlineProvider() { override fun getOutline(w: View, o: Outline) { o.setOval(0, 0, w.width, w.height) } }
+        v.clipToOutline = true
+    }
+
     // ---------- bubble ----------
     private fun balonEkle() {
         val ayar = getSharedPreferences("ruzgar", 0)
         val boy = dp(64)
-        val iv = ImageView(this).apply { setImageResource(R.drawable.ruzgar); elevation = 12f; contentDescription = "R\u00fczgar" }
+        val iv = ImageView(this).apply { setImageResource(R.drawable.ruzgar); contentDescription = "R\u00fczgar"; yuvarla(this) }
         val lp = WindowManager.LayoutParams(boy, boy, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT).apply {
@@ -157,7 +167,7 @@ class BalonServisi : Service() {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(14), dp(8), dp(6), dp(8)); setBackgroundColor(Color.parseColor("#211F3A"))
         }
-        val ikon = ImageView(this).apply { setImageResource(R.drawable.ruzgar) }
+        val ikon = ImageView(this).apply { setImageResource(R.drawable.ruzgar); yuvarla(this) }
         ust.addView(ikon, LinearLayout.LayoutParams(dp(26), dp(26)))
         ust.addView(TextView(this).apply { text = "  R\u00fczgar"; setTextColor(Color.WHITE); textSize = 16f },
             LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
@@ -196,11 +206,11 @@ class BalonServisi : Service() {
         kutu.setOnTouchListener { _, e -> if (e.action == MotionEvent.ACTION_OUTSIDE) { panelKapat(); true } else false }
 
         val dm = resources.displayMetrics
-        panelLp = WindowManager.LayoutParams(dm.widthPixels - dp(20), (dm.heightPixels * 0.62).toInt(),
+        panelLp = WindowManager.LayoutParams(dm.widthPixels - dp(12), (dm.heightPixels * 0.74).toInt(),
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
             PixelFormat.TRANSLUCENT).apply {
-            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL; y = dp(14)
+            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL; y = dp(8)
             softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
             windowAnimations = android.R.style.Animation_Dialog
         }
@@ -268,6 +278,7 @@ class BalonServisi : Service() {
         }
         @JavascriptInterface fun qrOkut() = balon?.post { panelKapat(); startActivity(Intent(this@BalonServisi, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
         @JavascriptInterface fun balonDurum(): Boolean = true
+        @JavascriptInterface fun mini(): Boolean = true
         @JavascriptInterface fun balon(ac: Boolean) = balon?.post { if (!ac) { getSharedPreferences("ruzgar", 0).edit().putBoolean("balon", false).apply(); stopSelf() } }
     }
 
