@@ -2,6 +2,8 @@ package com.beko.ruzgar
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -56,6 +58,19 @@ class MainActivity : Activity() {
         web.addJavascriptInterface(Kopru(), "RuzgarAndroid")
         setContentView(web)
         ac(intent)
+    }
+
+    // Pairing without QR: copy the pairing link (from the Mac/chat), open the app -> it pairs itself,
+    // then the clipboard is cleared so the key does not linger there.
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (!hasFocus) return
+        val pano = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val metin = pano.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(this)?.toString()?.trim() ?: return
+        if (!metin.startsWith(SAYFA) || !metin.contains("#e=")) return
+        web.loadUrl(metin); web.postDelayed({ web.reload() }, 700)
+        runCatching { pano.setPrimaryClip(ClipData.newPlainText("", "")) }
+        Toast.makeText(this, "R\u00fczgar e\u015fle\u015fti \u2714", Toast.LENGTH_LONG).show()
     }
 
     override fun onNewIntent(i: Intent) { super.onNewIntent(i); ac(i) }
